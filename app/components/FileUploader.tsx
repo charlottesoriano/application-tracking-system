@@ -1,15 +1,36 @@
 import { useCallback, useState } from "react";
-import { useDropzone } from "react-dropzone";
-import { formatSize } from "~/lib/utils";
+import { useDropzone, type FileRejection } from "react-dropzone";
+import { ACCEPTED_FILE_TYPE, formatSize, MAX_FILE_SIZE } from "~/lib/utils";
 
 interface FileUploaderProps {
-    onFileSelect?: (file: File | null) => void;
+    onFileSelect?: (file: File | null, error?: string) => void;
+}
+
+const getRejectionError = (fileRejections: FileRejection[]) => {
+    const code = fileRejections[0]?.errors[0]?.code
+
+    switch (code) {
+        case 'file-too-large':
+            return `File is too large. Max size is ${formatSize(MAX_FILE_SIZE)}`
+        case 'file-invalid-type':
+            return 'Only PDF files are allowed'
+        case 'too-many-files':
+            return 'Only one file can be uploaded'
+        default:
+            return fileRejections[0]?.errors[0]?.message || 'File could not be uploaded'
+    }
 }
 
 const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
     const [file, setFile] = useState<File | null>(null)
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
+    const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
+        if (fileRejections.length > 0) {
+            setFile(null)
+            onFileSelect?.(null, getRejectionError(fileRejections))
+            return
+        }
+
         const file = acceptedFiles[0] || null
         setFile(file)
         onFileSelect?.(file)
@@ -19,8 +40,8 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
         {
             onDrop,
             multiple: false,
-            accept: { 'application/pdf': ['.pdf'] },
-            maxSize: 20 * 1024 * 1024
+            accept: { [ACCEPTED_FILE_TYPE]: ['.pdf'] },
+            maxSize: MAX_FILE_SIZE
         }
     )
 

@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from "react"
 import Navbar from "../components/Navbar"
 import FileUploader from "~/components/FileUploader"
+import { ACCEPTED_FILE_TYPE, formatSize, generateUUID, MAX_FILE_SIZE, stripCodeFences } from "~/lib/utils"
+import { usePuterStore } from "~/lib/puter"
+import { useNavigate } from "react-router"
+import { convertPdfToImage } from "~/lib/pdf2img"
+import { AIResponseFormat, prepareInstructions } from "../../constants"
 
 interface FormErrors {
     companyName?: string
@@ -10,14 +15,16 @@ interface FormErrors {
 }
 
 const Upload = () => {
+    const { auth, isLoading, fs, ai, kv } = usePuterStore()
+    const navigate = useNavigate()
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusText, setStatusText] = useState("")
     const [file, setFile] = useState<File | null>(null)
     const [errors, setErrors] = useState<FormErrors>({})
 
-    const handleFileSelect = (file: File | null) => {
+    const handleFileSelect = (file: File | null, error?: string) => {
         setFile(file)
-        setErrors((prev) => ({ ...prev, file: file ? undefined : prev.file }))
+        setErrors((prev) => ({ ...prev, file: error ?? (file ? undefined : prev.file) }))
     }
 
     const clearError = (field: keyof FormErrors) => {
@@ -30,9 +37,64 @@ const Upload = () => {
         if (!companyName.trim()) newErrors.companyName = 'Company name is required'
         if (!jobTitle.trim()) newErrors.jobTitle = 'Job title is required'
         if (!jobDescription.trim()) newErrors.jobDescription = 'Job description is required'
-        if (!file) newErrors.file = 'Resume is required'
+
+        if (!file) {
+            newErrors.file = 'Resume is required'
+        } else if (file.type !== ACCEPTED_FILE_TYPE) {
+            newErrors.file = 'Only PDF files are allowed'
+        } else if (file.size > MAX_FILE_SIZE) {
+            newErrors.file = `File is too large. Max size is ${formatSize(MAX_FILE_SIZE)}`
+        }
 
         return newErrors
+    }
+
+    const handleAnalyze = async ({ companyName, jobTitle, jobDescription, file }: { companyName: string, jobTitle: string, jobDescription: string, file: File }) => {
+        setIsProcessing(true)
+        setStatusText('Uploading the file...')
+        const uploadedFile = await fs.upload([file])
+
+        if (!uploadedFile) return setStatusText('Error: Failed to upload file')
+
+        setStatusText('Converting to image...')
+        const imageFile = await convertPdfToImage(file)
+        console.log("imageFile", imageFile)
+        if (!imageFile || !imageFile.file) setStatusText('Error: Failed to convert PDF to image')
+
+        setStatusText('Uploading the image...')
+        console.log(imageFile.file)
+        const uploadedImage = await fs.upload([imageFile.file!])
+        if (!uploadedImage) return setStatusText('Error: Failed to upload image')
+
+        setStatusText('Preparing data...')
+
+        const uuid = generateUUID()
+
+        const data = {
+            id: uuid,
+            resumePath: uploadedFile.path,
+            imagePath: uploadedImage.path,
+            companyName, jobTitle, jobDescription,
+            feedback: ''
+        }
+        await kv.set(`resume:${uuid}`, JSON.stringify(data))
+        setStatusText('Analyzing...')
+
+        const feedback = await ai.feedback(
+            uploadedFile.path,
+            prepareInstructions({ jobTitle, jobDescription })
+        )
+
+        if (!feedback) return setStatusText('Error: Failed to analyze resume')
+
+        const feedbackText = typeof feedback.message.content === 'string'
+            ? feedback.message.content
+            : feedback.message.content[0].text
+
+        data.feedback = JSON.parse(stripCodeFences(feedbackText))
+        await kv.set(`resume:${uuid}`, JSON.stringify(data))
+        setStatusText('Analysis complete. Redirecting...')
+        console.log(data)
     }
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -49,6 +111,9 @@ const Upload = () => {
 
         if (Object.keys(newErrors).length > 0) return
 
+        if (!file) return
+
+        handleAnalyze({ companyName, jobTitle, jobDescription, file })
     }
 
     return (
