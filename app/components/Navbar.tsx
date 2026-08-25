@@ -8,7 +8,7 @@ const Navbar = () => {
     return (
         <nav className='navbar'>
             <Link to='/'>
-                <p className='text-2xl font-bold text-gradiewnt'>RESUMIND</p>
+                <p className='text-2xl font-bold text-gradiewnt'>The Reality Check</p>
             </Link>
             <div className='flex flex-row items-center gap-4'>
                 <Link to='/upload' className='primary-button w-fit'>

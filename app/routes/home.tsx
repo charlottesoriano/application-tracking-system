@@ -2,12 +2,12 @@ import Navbar from "~/components/Navbar";
 import type { Route } from "./+types/home";
 import ResumeCard from "~/components/ResumeCard";
 import { useEffect, useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { usePuterStore } from "~/lib/puter"
 
 export function meta({ }: Route.MetaArgs) {
   return [
-    { title: "Resumind" },
+    { title: "The Reality Check" },
     { name: "description", content: "Smart feedback for your dream job!" },
   ];
 }
