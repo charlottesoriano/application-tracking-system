@@ -1,3 +1,6 @@
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
 export const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 export const ACCEPTED_FILE_TYPE = 'application/pdf'
 
@@ -18,4 +21,8 @@ export const generateUUID = () => crypto.randomUUID()
 // remainder can be passed straight to JSON.parse.
 export function stripCodeFences(text: string): string {
     return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+}
+
+export function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs))
 }
