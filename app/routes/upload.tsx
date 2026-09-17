@@ -3,7 +3,7 @@ import Navbar from "../components/Navbar"
 import FileUploader from "~/components/FileUploader"
 import { ACCEPTED_FILE_TYPE, formatSize, generateUUID, MAX_FILE_SIZE, stripCodeFences } from "~/lib/utils"
 import { usePuterStore } from "~/lib/puter"
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { convertPdfToImage } from "~/lib/pdf2img"
 import { AIResponseFormat, prepareInstructions } from "../../constants"
 
@@ -13,6 +13,18 @@ interface FormErrors {
     jobDescription?: string
     file?: string
 }
+
+const Step = ({ number, title, description }: { number: number; title: string; description: string }) => (
+    <li className="flex gap-4">
+        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-100 text-accent-700 font-display font-bold flex items-center justify-center">
+            {number}
+        </span>
+        <div className="flex flex-col gap-1 pt-0.5">
+            <p className="font-semibold text-foreground">{title}</p>
+            <p className="text-sm text-foreground-secondary">{description}</p>
+        </div>
+    </li>
+)
 
 const Upload = () => {
     const { auth, isLoading, fs, ai, kv } = usePuterStore()
@@ -91,7 +103,8 @@ const Upload = () => {
             resumePath: uploadedFile.path,
             imagePath: uploadedImage.path,
             companyName, jobTitle, jobDescription,
-            feedback: ''
+            feedback: '',
+            createdAt: new Date().toISOString()
         }
         await kv.set(`resume:${uuid}`, JSON.stringify(data))
         if (cancelledRef.current) return
@@ -137,72 +150,107 @@ const Upload = () => {
     }
 
     return (
-        <main className="bg-main bg-cover">
-            <Navbar />
-            <section className="main-section">
-                <div className="page-heading py-16">
-                    <h1>Smart feedback for your dream job</h1>
-                    {isProcessing ? (
-                        <>
-                            <h2>{statusText}</h2>
-                            <img src="/images/resume-scan.gif" className="w-full" />
-                        </>
-                    ) : (
-                        <h2>Drop your resume for an ATS score and improvement tips</h2>
-                    )}
+        <main className="!pt-0 min-h-screen bg-background">
+            <Navbar backTo={{ to: '/', label: 'Back to homepage' }} />
+            <section className="max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-10 flex flex-col gap-6">
+                <Link
+                    to="/"
+                    className="inline-flex items-center gap-2 w-fit text-sm font-medium text-foreground-secondary hover:text-foreground transition-colors"
+                >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Back
+                </Link>
 
-                    {!isProcessing ? (
-                        <form id="upload-form" onSubmit={handleSubmit} className="flex flex-col gap-4 mt-8">
-                            <div className="form-div">
-                                <label htmlFor="company-name">Company Name</label>
-                                <input
-                                    type="text"
-                                    name="company-name"
-                                    placeholder="Company Name"
-                                    id="company-name"
-                                    aria-invalid={!!errors.companyName}
-                                    className={errors.companyName ? 'border-red-500' : ''}
-                                    onChange={(e) => e.target.value.trim() && clearError('companyName')}
-                                />
-                                {errors.companyName && <p className="text-red-500 text-sm">{errors.companyName}</p>}
-                            </div>
-                            <div className="form-div">
-                                <label htmlFor="job-title">Job Title</label>
-                                <input
-                                    type="text"
-                                    name="job-title"
-                                    placeholder="Job Title"
-                                    id="job-title"
-                                    aria-invalid={!!errors.jobTitle}
-                                    className={errors.jobTitle ? 'border-red-500' : ''}
-                                    onChange={(e) => e.target.value.trim() && clearError('jobTitle')}
-                                />
-                                {errors.jobTitle && <p className="text-red-500 text-sm">{errors.jobTitle}</p>}
-                            </div>
-                            <div className="form-div">
-                                <label htmlFor="job-description">Job Description</label>
-                                <textarea
-                                    rows={5}
-                                    name="job-description"
-                                    placeholder="Job Description"
-                                    id="job-description"
-                                    aria-invalid={!!errors.jobDescription}
-                                    className={errors.jobDescription ? 'border-red-500' : ''}
-                                    onChange={(e) => e.target.value.trim() && clearError('jobDescription')}
-                                />
-                                {errors.jobDescription && <p className="text-red-500 text-sm">{errors.jobDescription}</p>}
-                            </div>
-                            <div className="form-div">
-                                <label htmlFor="uploader">Upload Resume</label>
-                                <FileUploader onFileSelect={handleFileSelect} />
-                                {errors.file && <p className="text-red-500 text-sm">{errors.file}</p>}
-                            </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+                    <div className="flex flex-col gap-6 lg:pt-6">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-accent-600">New Submission</span>
+                        <h1>Smart feedback for your dream job</h1>
+                        <p className="text-foreground-secondary max-w-md">
+                            Drop your resume and the role you are applying for. You will get an ATS score and specific, section-by-section improvement tips.
+                        </p>
 
-                            <button className="primary-button" type="submit">Analyze Resume</button>
-                        </form>
-                    ) : (
-                        <></>
-                    )}
+                        <hr className="border-border" />
+
+                        <ol className="flex flex-col gap-6">
+                            <Step
+                                number={1}
+                                title="Add the role details"
+                                description="Tell us the company, job title and description so feedback matches the role."
+                            />
+                            <Step
+                                number={2}
+                                title="Upload your resume"
+                                description={`PDF up to ${formatSize(MAX_FILE_SIZE)}.`}
+                            />
+                            <Step
+                                number={3}
+                                title="Get instant feedback"
+                                description="An ATS score plus a breakdown of tone, content, structure and skills."
+                            />
+                        </ol>
+                    </div>
+
+                    <div className="bg-surface border border-border rounded-2xl shadow-sm p-6 sm:p-8 w-full">
+                        {isProcessing ? (
+                            <div className="flex flex-col items-center gap-6 py-10 text-center">
+                                <img src="/images/resume-scan.gif" className="w-full max-w-xs" />
+                                <p className="font-display font-semibold text-lg text-foreground">{statusText}</p>
+                            </div>
+                        ) : (
+                            <form id="upload-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
+                                <div className="form-div">
+                                    <label htmlFor="company-name">Company name</label>
+                                    <input
+                                        type="text"
+                                        name="company-name"
+                                        placeholder="e.g. Accion Labs"
+                                        id="company-name"
+                                        aria-invalid={!!errors.companyName}
+                                        className={errors.companyName ? 'border-danger' : 'border-border'}
+                                        onChange={(e) => e.target.value.trim() && clearError('companyName')}
+                                    />
+                                    {errors.companyName && <p className="text-danger text-sm">{errors.companyName}</p>}
+                                </div>
+                                <div className="form-div">
+                                    <label htmlFor="job-title">Job title</label>
+                                    <input
+                                        type="text"
+                                        name="job-title"
+                                        placeholder="e.g. Senior Full Stack Developer"
+                                        id="job-title"
+                                        aria-invalid={!!errors.jobTitle}
+                                        className={errors.jobTitle ? 'border-danger' : 'border-border'}
+                                        onChange={(e) => e.target.value.trim() && clearError('jobTitle')}
+                                    />
+                                    {errors.jobTitle && <p className="text-danger text-sm">{errors.jobTitle}</p>}
+                                </div>
+                                <div className="form-div">
+                                    <div className="flex items-baseline justify-between w-full">
+                                        <label htmlFor="job-description">Job description</label>
+                                    </div>
+                                    <textarea
+                                        rows={5}
+                                        name="job-description"
+                                        placeholder="Paste the job description here"
+                                        id="job-description"
+                                        aria-invalid={!!errors.jobDescription}
+                                        className={errors.jobDescription ? 'border-danger' : 'border-border'}
+                                        onChange={(e) => e.target.value.trim() && clearError('jobDescription')}
+                                    />
+                                    {errors.jobDescription && <p className="text-danger text-sm">{errors.jobDescription}</p>}
+                                </div>
+                                <div className="form-div">
+                                    <label htmlFor="uploader">Upload resume</label>
+                                    <FileUploader onFileSelect={handleFileSelect} />
+                                    {errors.file && <p className="text-danger text-sm">{errors.file}</p>}
+                                </div>
+
+                                <button className="primary-button" type="submit">Analyze resume</button>
+                            </form>
+                        )}
+                    </div>
                 </div>
             </section>
         </main>
