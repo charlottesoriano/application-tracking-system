@@ -1,18 +1,22 @@
-# Welcome to React Router!
+# The Reality Check
 
-A modern, production-ready template for building full-stack React applications using React Router.
+A personal, mini project for getting AI-powered resume feedback before you hit submit on a job application. Upload a resume against a specific job posting and get back an ATS compatibility score plus a section-by-section breakdown (tone & style, content, structure, skills).
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+This is a small side project, not a production app — built largely to experiment with [Puter.js](https://puter.com), which provides serverless auth, file storage, a key-value store, and AI access directly from the browser, so the whole app runs without a custom backend or database.
+
+## Tech stack
+
+- [React Router](https://reactrouter.com/) (framework mode) + TypeScript
+- [Tailwind CSS](https://tailwindcss.com/) for styling
+- [Puter.js](https://puter.com) for auth, file storage, key-value storage, and AI-driven resume analysis
+- [pdfjs-dist](https://mozilla.github.io/pdf.js/) for rendering resume PDFs to preview images
 
 ## Features
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- Sign in and upload a resume (PDF) alongside a target company, job title, and job description
+- AI-generated ATS compatibility score and section-by-section feedback (tone & style, content, structure, skills)
+- Dashboard listing past submissions with their scores (no application-status workflow — no "accepted"/"rejected" tracking)
+- Delete individual applications or clear everything
 
 ## Getting Started
 
@@ -42,46 +46,6 @@ Create a production build:
 npm run build
 ```
 
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
 ---
 
-Built with ❤️ using React Router.
+Built with React Router + Puter.js.
