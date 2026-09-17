@@ -175,7 +175,13 @@ export const usePuterStore = create<PuterStore>((set, get) => {
         set({ isLoading: true, error: null });
 
         try {
-            await puter.auth.signIn();
+            const timeout = new Promise<never>((_, reject) => {
+                setTimeout(
+                    () => reject(new Error("Sign in timed out. Please check that popups aren't blocked and try again.")),
+                    20000
+                );
+            });
+            await Promise.race([puter.auth.signIn(), timeout]);
             await checkAuthStatus();
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Sign in failed";
@@ -387,7 +393,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             setError("Puter.js not available");
             return;
         }
-        return puter.kv.delete(key);
+        return puter.kv.del(key);
     };
 
     const listKV = async (pattern: string, returnValues?: boolean) => {
