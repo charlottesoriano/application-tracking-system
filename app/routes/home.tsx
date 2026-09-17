@@ -180,23 +180,25 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-surface border border-border rounded-2xl w-full overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left border-collapse">
-                <thead className="bg-surface-alt text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-                  <tr>
-                    <th className="p-4 font-semibold">Company / Role</th>
-                    <th className="p-4 font-semibold">Applied</th>
-                    <th className="p-4 font-semibold">Score</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedResumes.map((resume) => (
-                    <ApplicationRow key={resume.id} resume={resume} onDelete={handleResumeDelete} />
-                  ))}
-                </tbody>
-              </table>
+            <div className="bg-surface border border-border rounded-2xl w-full overflow-hidden">
+              <div className="overflow-auto max-h-[520px]">
+                <table className="w-full min-w-[720px] text-left border-collapse">
+                  <thead className="bg-surface-alt text-xs font-semibold uppercase tracking-wide text-foreground-muted sticky top-0 z-10">
+                    <tr>
+                      <th className="p-4 font-semibold">Company / Role</th>
+                      <th className="p-4 font-semibold">Applied</th>
+                      <th className="p-4 font-semibold">Score</th>
+                      <th className="p-4 font-semibold">Status</th>
+                      <th className="p-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedResumes.map((resume) => (
+                      <ApplicationRow key={resume.id} resume={resume} onDelete={handleResumeDelete} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </>
