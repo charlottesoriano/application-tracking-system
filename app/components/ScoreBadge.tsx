@@ -1,9 +1,9 @@
 const ScoreBadge = ({ score }: { score: number }) => {
     const badgeStyles = score > 69
-        ? 'bg-badge-green text-green-600'
+        ? 'bg-positive-bg text-positive'
         : score > 49
-            ? 'bg-badge-yellow text-yellow-600'
-            : 'bg-badge-red text-red-600'
+            ? 'bg-caution-bg text-caution'
+            : 'bg-danger-bg text-danger'
 
     const label = score > 69 ? 'Strong' : score > 49 ? 'Good Start' : 'Needs Work'
 

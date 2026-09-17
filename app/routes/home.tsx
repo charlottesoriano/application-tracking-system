@@ -1,8 +1,9 @@
 import Navbar from "~/components/Navbar";
 import type { Route } from "./+types/home";
-import ResumeCard from "~/components/ResumeCard";
+import ApplicationRow from "~/components/ApplicationRow";
+import UploadButton from "~/components/UploadButton";
 import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { useNavigate } from "react-router"
 import { usePuterStore } from "~/lib/puter"
 
 export function meta({ }: Route.MetaArgs) {
@@ -12,10 +13,23 @@ export function meta({ }: Route.MetaArgs) {
   ];
 }
 
+type SortOrder = 'newest' | 'oldest'
+
+const StatCell = ({ label, value, suffix }: { label: string; value: number; suffix?: string }) => (
+  <div className="flex flex-col gap-2 p-6">
+    <span className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">{label}</span>
+    <span className="text-3xl font-display font-bold text-foreground">
+      {value}
+      {suffix && <span className="text-lg font-medium text-foreground-secondary">{suffix}</span>}
+    </span>
+  </div>
+)
+
 export default function Home() {
   const [resumes, setResumes] = useState<Resume[]>([])
   const [loading, setIsLoading] = useState(false)
   const [isDeletingAll, setIsDeletingAll] = useState(false)
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
   const { auth, fs, kv } = usePuterStore()
   const navigate = useNavigate()
 
@@ -94,15 +108,28 @@ export default function Home() {
     }
   }
 
-  return <main className="bg-main bg-cover">
+  const averageScore = resumes.length
+    ? Math.round(resumes.reduce((sum, r) => sum + (r.feedback?.overallScore ?? 0), 0) / resumes.length)
+    : 0
+  const topScore = resumes.length
+    ? Math.max(...resumes.map((r) => r.feedback?.overallScore ?? 0))
+    : 0
+
+  const sortedResumes = [...resumes].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return sortOrder === 'newest' ? timeB - timeA : timeA - timeB
+  })
+
+  return <main className="!pt-0 min-h-screen bg-background">
     <Navbar />
-    <section className="main-section">
-      <div className="page-heading py-16">
-        <h1>Track Your Applications & Resume Ratings</h1>
-        {!loading && resumes?.length == 0 ? (
-          <h2>No resumes found. Upload your first resume to get feedback.</h2>
+    <section className="main-section max-w-[1400px] w-full !mx-auto items-stretch px-4 sm:px-6 lg:px-10">
+      <div className="flex flex-col gap-3 w-full items-start">
+        <h1>Track your applications and resume ratings</h1>
+        {!loading && resumes.length === 0 ? (
+          <h2 className="max-w-2xl">No resumes found. Upload your first resume to get feedback.</h2>
         ) : (
-          <h2>Review your submissions and check AI-powered feedback.</h2>
+          <h2 className="max-w-2xl">Review every submission in one place and see exactly how each tailored resume is scoring, before a recruiter does.</h2>
         )}
       </div>
 
@@ -112,40 +139,74 @@ export default function Home() {
         </div>
       )}
 
-
-      {
-        !loading && resumes.length > 0 && (
-          <>
-            <div className="flex justify-end w-full max-w-[1850px] px-4">
-              <button
-                type="button"
-                onClick={handleDeleteAll}
-                disabled={isDeletingAll}
-                className="bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-full disabled:opacity-50 cursor-pointer transition-colors"
-              >
-                {isDeletingAll ? 'Deleting...' : 'Delete All'}
-              </button>
-            </div>
-            <div className="resumes-section">
-              {
-                resumes.map((resume) => (
-                  <ResumeCard key={resume.id} resume={resume} onDelete={handleResumeDelete} />
-                ))
-              }
-            </div>
-          </>
-        )
-      }
-
-      {
-        loading && resumes.length == 0 && (
-          <div className="flex flex-col items-center justify-center mt-10 gap-4">
-            <Link to="/upload" className="primary-button w-fit text-xl font-semibold">
-              Upload Resume
-            </Link>
+      {!loading && resumes.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border bg-surface border border-border rounded-2xl w-full overflow-hidden">
+            <StatCell label="Applications" value={resumes.length} />
+            <StatCell label="Average score" value={averageScore} suffix="/100" />
+            <StatCell label="Top score" value={topScore} suffix="/100" />
           </div>
-        )
-      }
+
+          <div className="flex flex-col gap-4 w-full">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xl font-display font-bold text-foreground">Your applications</h3>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                    className="appearance-none bg-surface border border-border rounded-full pl-4 pr-9 py-2 text-sm font-medium text-foreground cursor-pointer focus:outline-none"
+                  >
+                    <option value="newest">Sort: Newest</option>
+                    <option value="oldest">Sort: Oldest</option>
+                  </select>
+                  <svg
+                    className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-foreground-muted"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDeleteAll}
+                  disabled={isDeletingAll}
+                  className="bg-danger-bg text-danger border border-danger/20 hover:bg-danger/10 font-semibold px-4 py-2 rounded-full text-sm disabled:opacity-50 cursor-pointer transition-colors"
+                >
+                  {isDeletingAll ? 'Deleting...' : 'Delete all'}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-surface border border-border rounded-2xl w-full overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left border-collapse">
+                <thead className="bg-surface-alt text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                  <tr>
+                    <th className="p-4 font-semibold">Company / Role</th>
+                    <th className="p-4 font-semibold">Applied</th>
+                    <th className="p-4 font-semibold">Score</th>
+                    <th className="p-4 font-semibold">Status</th>
+                    <th className="p-4"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedResumes.map((resume) => (
+                    <ApplicationRow key={resume.id} resume={resume} onDelete={handleResumeDelete} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {!loading && resumes.length === 0 && (
+        <div className="flex flex-col items-center justify-center mt-10 gap-4">
+          <UploadButton />
+        </div>
+      )}
     </section>
 
   </main>;

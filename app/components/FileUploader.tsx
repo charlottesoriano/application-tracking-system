@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
-import { ACCEPTED_FILE_TYPE, formatSize, MAX_FILE_SIZE } from "~/lib/utils";
+import { ACCEPTED_FILE_TYPE, cn, formatSize, MAX_FILE_SIZE } from "~/lib/utils";
 
 interface FileUploaderProps {
     onFileSelect?: (file: File | null, error?: string) => void;
@@ -51,49 +51,52 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
         onFileSelect?.(null)
     }
 
-
-
-
     return (
-        <div className="w-full gradient-border">
-            <div {...getRootProps()}>
-                <input {...getInputProps()} />
-                <div className="space-y-4 cursor-pointer">
-                    <div className="mx-auto w-16 h-16 flex items-center justify-center">
-                        <img src="/icons/info.svg" alt="upload" className="size-20" />
-                    </div>
-
-                    {
-                        file ? (
-                            <div className="uploader-selected-file" onClick={(e) => e.stopPropagation()}>
-                                <img src="/images/pdf.png" alt="pdf" className="size-10" />
-                                <div className="flex items-center space-x-3">
-                                    <div>
-                                        <p className="text-lg text-gray-700 font-medium truncate max-w-xs">
-                                            {file.name}
-                                        </p>
-                                        <p className="text-sm text-gray-500">
-                                            {formatSize(file.size)}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button className="p-2 cursor-pointer" onClick={handleRemove}>
-                                    <img src="/icons/cross.svg" alt="remove" className="w-4 h-4" />
-                                </button>
+        <div
+            {...getRootProps()}
+            className={cn('uplader-drag-area', isDragActive && 'bg-accent-tint-100')}
+        >
+            <input {...getInputProps()} />
+            <div className="space-y-4 cursor-pointer">
+                {file ? (
+                    <div className="uploader-selected-file" onClick={(e) => e.stopPropagation()}>
+                        <img src="/images/pdf.png" alt="pdf" className="size-10" />
+                        <div className="flex items-center space-x-3">
+                            <div>
+                                <p className="text-lg text-foreground font-medium truncate max-w-xs">
+                                    {file.name}
+                                </p>
+                                <p className="text-sm text-foreground-secondary">
+                                    {formatSize(file.size)}
+                                </p>
                             </div>
-                        )
-                            : (
-                                <div>
-                                    <p className="text-lg text-gray-500">
-                                        <span className="font-semibold">Click to Upload</span> or drag and drop
-                                    </p>
-                                    <p className="text-lg text-gray-500">
-                                        PDF (max 20 MB)
-                                    </p>
-                                </div>
-                            )
-                    }
-                </div>
+                        </div>
+                        <button className="p-2 cursor-pointer" onClick={handleRemove}>
+                            <img src="/icons/cross.svg" alt="remove" className="w-4 h-4" />
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <div className="mx-auto w-12 h-12 flex items-center justify-center text-accent-600">
+                            <svg className="w-full h-full" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path
+                                    d="M7 18a4.5 4.5 0 01-1-8.89 5.5 5.5 0 0110.78-1.79A4.5 4.5 0 0117 18M9 15l3-3 3 3m-3-3v9"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                />
+                            </svg>
+                        </div>
+                        <p className="text-foreground">
+                            <span className="font-semibold">Drag and drop your resume</span>, or{' '}
+                            <span className="font-semibold text-accent-600">browse files</span>
+                        </p>
+                        <p className="text-sm text-foreground-muted">
+                            PDF, up to {formatSize(MAX_FILE_SIZE)}
+                        </p>
+                    </>
+                )}
             </div>
         </div>
     )
