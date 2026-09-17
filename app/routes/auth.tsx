@@ -8,7 +8,7 @@ export const meta = () => ([
 ])
 
 const Auth = () => {
-    const { isLoading, auth } = usePuterStore()
+    const { isLoading, error, auth } = usePuterStore()
     const location = useLocation()
     const next = location.search.split('next=')[1]
     const navigate = useNavigate()
@@ -44,6 +44,9 @@ const Auth = () => {
                             </>
                         )}
                     </div>
+                    {error && (
+                        <p className="text-red-500 text-center text-sm">{error}</p>
+                    )}
                 </section>
             </div>
         </main>

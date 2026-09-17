@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import Navbar from "../components/Navbar"
 import FileUploader from "~/components/FileUploader"
 import { ACCEPTED_FILE_TYPE, formatSize, generateUUID, MAX_FILE_SIZE, stripCodeFences } from "~/lib/utils"
@@ -21,6 +21,18 @@ const Upload = () => {
     const [statusText, setStatusText] = useState("")
     const [file, setFile] = useState<File | null>(null)
     const [errors, setErrors] = useState<FormErrors>({})
+    const cancelledRef = useRef(false)
+
+    useEffect(() => {
+        if (!auth.isAuthenticated) {
+            cancelledRef.current = true
+            if (isProcessing) {
+                setIsProcessing(false)
+                setStatusText("")
+            }
+            navigate('/auth?next=/upload')
+        }
+    }, [auth.isAuthenticated])
 
     const handleFileSelect = (file: File | null, error?: string) => {
         setFile(file)
@@ -50,20 +62,24 @@ const Upload = () => {
     }
 
     const handleAnalyze = async ({ companyName, jobTitle, jobDescription, file }: { companyName: string, jobTitle: string, jobDescription: string, file: File }) => {
+        cancelledRef.current = false
         setIsProcessing(true)
         setStatusText('Uploading the file...')
         const uploadedFile = await fs.upload([file])
+        if (cancelledRef.current) return
 
         if (!uploadedFile) return setStatusText('Error: Failed to upload file')
 
         setStatusText('Converting to image...')
         const imageFile = await convertPdfToImage(file)
+        if (cancelledRef.current) return
         console.log("imageFile", imageFile)
         if (!imageFile || !imageFile.file) setStatusText('Error: Failed to convert PDF to image')
 
         setStatusText('Uploading the image...')
         console.log(imageFile.file)
         const uploadedImage = await fs.upload([imageFile.file!])
+        if (cancelledRef.current) return
         if (!uploadedImage) return setStatusText('Error: Failed to upload image')
 
         setStatusText('Preparing data...')
@@ -78,12 +94,14 @@ const Upload = () => {
             feedback: ''
         }
         await kv.set(`resume:${uuid}`, JSON.stringify(data))
+        if (cancelledRef.current) return
         setStatusText('Analyzing...')
 
         const feedback = await ai.feedback(
             uploadedFile.path,
             prepareInstructions({ jobTitle, jobDescription })
         )
+        if (cancelledRef.current) return
 
         if (!feedback) return setStatusText('Error: Failed to analyze resume')
 
@@ -93,6 +111,7 @@ const Upload = () => {
 
         data.feedback = JSON.parse(stripCodeFences(feedbackText))
         await kv.set(`resume:${uuid}`, JSON.stringify(data))
+        if (cancelledRef.current) return
         setStatusText('Analysis complete. Redirecting...')
         console.log(data)
         navigate(`/resume/${uuid}`)
