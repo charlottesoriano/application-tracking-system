@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import Navbar from "../components/Navbar"
 import FileUploader from "~/components/FileUploader"
-import { ACCEPTED_FILE_TYPE, formatSize, generateUUID, MAX_FILE_SIZE, stripCodeFences } from "~/lib/utils"
+import { ACCEPTED_FILE_TYPE, cn, formatSize, MAX_FILE_SIZE } from "~/lib/utils"
 import { usePuterStore } from "~/lib/puter"
+import { useAnalysisQueue } from "~/lib/queue"
+import { getMainResume } from "~/lib/mainResume"
 import { Link, useNavigate } from "react-router"
-import { convertPdfToImage } from "~/lib/pdf2img"
-import { AIResponseFormat, prepareInstructions } from "../../constants"
+
+type ResumeSource = 'upload' | 'main'
 
 interface FormErrors {
     companyName?: string
@@ -27,24 +29,36 @@ const Step = ({ number, title, description }: { number: number; title: string; d
 )
 
 const Upload = () => {
-    const { auth, isLoading, fs, ai, kv } = usePuterStore()
+    const { auth } = usePuterStore()
+    const enqueue = useAnalysisQueue((state) => state.enqueue)
     const navigate = useNavigate()
-    const [isProcessing, setIsProcessing] = useState(false)
-    const [statusText, setStatusText] = useState("")
     const [file, setFile] = useState<File | null>(null)
     const [errors, setErrors] = useState<FormErrors>({})
-    const cancelledRef = useRef(false)
+    const [source, setSource] = useState<ResumeSource>('upload')
+    const [mainResume, setMainResume] = useState<MainResume | null>(null)
+    const [isMainResumeLoading, setIsMainResumeLoading] = useState(true)
 
     useEffect(() => {
-        if (!auth.isAuthenticated) {
-            cancelledRef.current = true
-            if (isProcessing) {
-                setIsProcessing(false)
-                setStatusText("")
-            }
-            navigate('/auth?next=/upload')
-        }
+        if (!auth.isAuthenticated) navigate('/auth?next=/upload')
     }, [auth.isAuthenticated])
+
+    // Default to the main resume when one exists, so it isn't uploaded again.
+    useEffect(() => {
+        getMainResume()
+            .then((resume) => {
+                setMainResume(resume)
+                if (resume) setSource('main')
+            })
+            .catch(console.error)
+            .finally(() => setIsMainResumeLoading(false))
+    }, [])
+
+    const handleSourceChange = (value: ResumeSource) => {
+        // The uploader unmounts on switch, so drop its file to match.
+        setSource(value)
+        setFile(null)
+        clearError('file')
+    }
 
     const handleFileSelect = (file: File | null, error?: string) => {
         setFile(file)
@@ -62,7 +76,9 @@ const Upload = () => {
         if (!jobTitle.trim()) newErrors.jobTitle = 'Job title is required'
         if (!jobDescription.trim()) newErrors.jobDescription = 'Job description is required'
 
-        if (!file) {
+        if (source === 'main') {
+            if (!mainResume) newErrors.file = 'Set a main resume first, or upload a file'
+        } else if (!file) {
             newErrors.file = 'Resume is required'
         } else if (file.type !== ACCEPTED_FILE_TYPE) {
             newErrors.file = 'Only PDF files are allowed'
@@ -71,63 +87,6 @@ const Upload = () => {
         }
 
         return newErrors
-    }
-
-    const handleAnalyze = async ({ companyName, jobTitle, jobDescription, file }: { companyName: string, jobTitle: string, jobDescription: string, file: File }) => {
-        cancelledRef.current = false
-        setIsProcessing(true)
-        setStatusText('Uploading the file...')
-        const uploadedFile = await fs.upload([file])
-        if (cancelledRef.current) return
-
-        if (!uploadedFile) return setStatusText('Error: Failed to upload file')
-
-        setStatusText('Converting to image...')
-        const imageFile = await convertPdfToImage(file)
-        if (cancelledRef.current) return
-        console.log("imageFile", imageFile)
-        if (!imageFile || !imageFile.file) setStatusText('Error: Failed to convert PDF to image')
-
-        setStatusText('Uploading the image...')
-        console.log(imageFile.file)
-        const uploadedImage = await fs.upload([imageFile.file!])
-        if (cancelledRef.current) return
-        if (!uploadedImage) return setStatusText('Error: Failed to upload image')
-
-        setStatusText('Preparing data...')
-
-        const uuid = generateUUID()
-
-        const data = {
-            id: uuid,
-            resumePath: uploadedFile.path,
-            imagePath: uploadedImage.path,
-            companyName, jobTitle, jobDescription,
-            feedback: '',
-            createdAt: new Date().toISOString()
-        }
-        await kv.set(`resume:${uuid}`, JSON.stringify(data))
-        if (cancelledRef.current) return
-        setStatusText('Analyzing...')
-
-        const feedback = await ai.feedback(
-            uploadedFile.path,
-            prepareInstructions({ jobTitle, jobDescription })
-        )
-        if (cancelledRef.current) return
-
-        if (!feedback) return setStatusText('Error: Failed to analyze resume')
-
-        const feedbackText = typeof feedback.message.content === 'string'
-            ? feedback.message.content
-            : feedback.message.content[0].text
-
-        data.feedback = JSON.parse(stripCodeFences(feedbackText))
-        await kv.set(`resume:${uuid}`, JSON.stringify(data))
-        if (cancelledRef.current) return
-        setStatusText('Analysis complete. Redirecting...')
-        console.log(data)
-        navigate(`/resume/${uuid}`)
     }
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -144,9 +103,15 @@ const Upload = () => {
 
         if (Object.keys(newErrors).length > 0) return
 
-        if (!file) return
-
-        handleAnalyze({ companyName, jobTitle, jobDescription, file })
+        // Analysis runs in the background queue; progress shows on the homepage.
+        if (source === 'main' && mainResume) {
+            enqueue({ companyName, jobTitle, jobDescription, mainResume })
+        } else if (file) {
+            enqueue({ companyName, jobTitle, jobDescription, file })
+        } else {
+            return
+        }
+        navigate('/')
     }
 
     return (
@@ -181,8 +146,8 @@ const Upload = () => {
                             />
                             <Step
                                 number={2}
-                                title="Upload your resume"
-                                description={`PDF up to ${formatSize(MAX_FILE_SIZE)}.`}
+                                title="Choose your resume"
+                                description={`Use your main resume, or upload a PDF up to ${formatSize(MAX_FILE_SIZE)}.`}
                             />
                             <Step
                                 number={3}
@@ -193,12 +158,6 @@ const Upload = () => {
                     </div>
 
                     <div className="bg-surface border border-border rounded-2xl shadow-sm p-6 sm:p-8 w-full">
-                        {isProcessing ? (
-                            <div className="flex flex-col items-center gap-6 py-10 text-center">
-                                <img src="/images/resume-scan.gif" className="w-full max-w-xs" />
-                                <p className="font-display font-semibold text-lg text-foreground">{statusText}</p>
-                            </div>
-                        ) : (
                             <form id="upload-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
                                 <div className="form-div">
                                     <label htmlFor="company-name">Company name</label>
@@ -242,14 +201,62 @@ const Upload = () => {
                                     {errors.jobDescription && <p className="text-danger text-sm">{errors.jobDescription}</p>}
                                 </div>
                                 <div className="form-div">
-                                    <label htmlFor="uploader">Upload resume</label>
-                                    <FileUploader onFileSelect={handleFileSelect} />
+                                    <label htmlFor="uploader">Resume</label>
+                                    <div role="tablist" className="grid grid-cols-2 w-full p-1 bg-surface-alt rounded-full">
+                                        {([
+                                            ['upload', 'Upload'],
+                                            ['main', 'Use main resume'],
+                                        ] as const).map(([value, label]) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={source === value}
+                                                onClick={() => handleSourceChange(value)}
+                                                className={cn(
+                                                    'text-sm font-semibold rounded-full py-2 transition-colors cursor-pointer',
+                                                    source === value
+                                                        ? 'bg-surface text-foreground shadow-sm'
+                                                        : 'text-foreground-secondary hover:text-foreground'
+                                                )}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {source === 'upload' ? (
+                                        <FileUploader onFileSelect={handleFileSelect} />
+                                    ) : mainResume ? (
+                                        <div className="uploader-selected-file gap-3 w-full">
+                                            <img src="/images/pdf.png" alt="pdf" className="size-10" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-lg text-foreground font-medium truncate">{mainResume.fileName}</p>
+                                                <p className="text-sm text-foreground-secondary">{formatSize(mainResume.size)}</p>
+                                            </div>
+                                            <Link to="/main-resume" className="text-sm font-semibold text-accent-600 hover:text-accent-700">
+                                                Change
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="uploader-selected-file w-full !justify-start">
+                                            <p className="text-sm text-foreground-secondary">
+                                                {isMainResumeLoading ? 'Loading your main resume...' : (
+                                                    <>
+                                                        You haven't set a main resume yet.{' '}
+                                                        <Link to="/main-resume" className="font-semibold text-accent-600 hover:text-accent-700">
+                                                            Upload one
+                                                        </Link>
+                                                    </>
+                                                )}
+                                            </p>
+                                        </div>
+                                    )}
                                     {errors.file && <p className="text-danger text-sm">{errors.file}</p>}
                                 </div>
 
                                 <button className="primary-button" type="submit">Analyze resume</button>
                             </form>
-                        )}
                     </div>
                 </div>
             </section>

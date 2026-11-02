@@ -23,6 +23,13 @@ export function stripCodeFences(text: string): string {
     return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 }
 
+// Entries saved before the queue existed have no status: treat them as done
+// if they have feedback, otherwise as an interrupted (failed) analysis.
+export function getResumeStatus(resume: Resume): ResumeStatus {
+    if (resume.status) return resume.status
+    return resume.feedback ? 'done' : 'failed'
+}
+
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }

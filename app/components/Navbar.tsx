@@ -1,6 +1,7 @@
 import React from 'react'
-import { Link } from 'react-router'
+import { Link, NavLink } from 'react-router'
 import { usePuterStore } from '~/lib/puter'
+import { cn } from '~/lib/utils'
 import UploadButton from './UploadButton'
 
 interface NavbarProps {
@@ -17,6 +18,19 @@ const Navbar = ({ backTo }: NavbarProps) => {
                 <span className='text-xl font-display font-bold text-foreground'>Reality Check</span>
             </Link>
             <div className='flex flex-row items-center gap-3'>
+                {auth.isAuthenticated && (
+                    <NavLink
+                        to='/main-resume'
+                        className={({ isActive }) =>
+                            cn(
+                                'text-sm font-semibold rounded-full px-4 py-2.5 transition-colors',
+                                isActive ? 'bg-accent-100 text-accent-700' : 'text-foreground hover:bg-surface-alt'
+                            )
+                        }
+                    >
+                        Main Resume
+                    </NavLink>
+                )}
                 {backTo ? (
                     <Link
                         to={backTo.to}

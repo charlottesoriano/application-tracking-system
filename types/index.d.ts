@@ -5,14 +5,29 @@ interface Job {
     requiredSkills: string[];
 }
 
+type ResumeStatus = "processing" | "done" | "failed";
+
 interface Resume {
     id: string;
     companyName?: string;
     jobTitle?: string;
+    jobDescription?: string;
     imagePath: string;
     resumePath: string;
-    feedback: Feedback;
+    feedback?: Feedback;
+    status?: ResumeStatus;
+    error?: string;
     createdAt?: string;
+}
+
+// The user's default resume, uploaded once and shared by any application
+// submitted with "Use main resume" (those entries point at these same paths).
+interface MainResume {
+    resumePath: string;
+    imagePath: string;
+    fileName: string;
+    size: number;
+    uploadedAt: string;
 }
 
 interface Feedback {
