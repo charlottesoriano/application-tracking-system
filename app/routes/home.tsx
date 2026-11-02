@@ -2,9 +2,12 @@ import Navbar from "~/components/Navbar";
 import type { Route } from "./+types/home";
 import ApplicationRow from "~/components/ApplicationRow";
 import UploadButton from "~/components/UploadButton";
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router"
 import { usePuterStore } from "~/lib/puter"
+import { useAnalysisQueue } from "~/lib/queue"
+import { getResumeStatus } from "~/lib/utils"
+import { deleteUnreferencedFiles } from "~/lib/mainResume"
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -27,10 +30,12 @@ const StatCell = ({ label, value, suffix }: { label: string; value: number; suff
 
 export default function Home() {
   const [resumes, setResumes] = useState<Resume[]>([])
-  const [loading, setIsLoading] = useState(false)
+  const [loading, setIsLoading] = useState(true)
   const [isDeletingAll, setIsDeletingAll] = useState(false)
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
   const { auth, fs, kv } = usePuterStore()
+  const jobs = useAnalysisQueue((state) => state.jobs)
+  const cancelJob = useAnalysisQueue((state) => state.cancel)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -60,47 +65,67 @@ export default function Home() {
       )
 
       const validResumes: Resume[] = []
+      const orphanIds: string[] = []
+      const orphanPaths: string[] = []
       await Promise.all(
         parsedResumes.map(async (resume) => {
           const resumeExists = existingPaths.has(resume.resumePath)
           const imageExists = existingPaths.has(resume.imagePath)
 
           if (resumeExists && imageExists) {
+            // Saved as processing but no job is running for it in this tab:
+            // the analysis was cut off by a reload. Mark it so it can be retried.
+            if (getResumeStatus(resume) === 'processing' && !useAnalysisQueue.getState().jobs[resume.id]) {
+              resume.status = 'failed'
+              resume.error = 'Analysis was interrupted. Retry to finish it.'
+              await kv.set(`resume:${resume.id}`, JSON.stringify(resume))
+            }
             validResumes.push(resume)
             return
           }
 
           // Orphaned entry: storage is missing one or both files. Finish
           // cleaning it up so it doesn't keep showing up on future loads.
-          const cleanup: Promise<unknown>[] = [kv.delete(`resume:${resume.id}`)]
-          if (resumeExists) cleanup.push(fs.delete(resume.resumePath))
-          if (imageExists) cleanup.push(fs.delete(resume.imagePath))
-          await Promise.allSettled(cleanup)
+          orphanIds.push(resume.id)
+          if (resumeExists) orphanPaths.push(resume.resumePath)
+          if (imageExists) orphanPaths.push(resume.imagePath)
+          await kv.delete(`resume:${resume.id}`).catch(console.error)
         })
       )
+      // Remaining files may be shared with the main resume or other entries.
+      await deleteUnreferencedFiles(orphanPaths, orphanIds).catch(console.error)
 
       setResumes(validResumes)
     }
-    loadResumes()
-    setIsLoading(false)
+    loadResumes().finally(() => setIsLoading(false))
   }, [])
+
+  // Live queue jobs take precedence over what was loaded from KV, and also
+  // cover jobs that haven't been saved to KV yet (still uploading).
+  const allResumes = useMemo(() => {
+    const byId = new Map(resumes.map((resume) => [resume.id, resume]))
+    Object.values(jobs).forEach((job) => byId.set(job.resume.id, job.resume))
+    return Array.from(byId.values())
+  }, [resumes, jobs])
+
+  const scoredResumes = allResumes.filter((resume) => getResumeStatus(resume) === 'done')
 
   const handleResumeDelete = (id: string) => {
     setResumes((prev) => prev.filter((resume) => resume.id !== id))
   }
 
   const handleDeleteAll = async () => {
-    if (isDeletingAll || resumes.length === 0) return
-    if (!window.confirm(`Delete all ${resumes.length} resume(s)? This cannot be undone.`)) return
+    if (isDeletingAll || allResumes.length === 0) return
+    if (!window.confirm(`Delete all ${allResumes.length} resume(s)? This cannot be undone.`)) return
 
     setIsDeletingAll(true)
     try {
-      await Promise.all(
-        resumes.flatMap((resume) => [
-          fs.delete(resume.resumePath),
-          fs.delete(resume.imagePath),
-          kv.delete(`resume:${resume.id}`),
-        ])
+      allResumes.forEach((resume) => cancelJob(resume.id))
+      await Promise.all(allResumes.map((resume) => kv.delete(`resume:${resume.id}`)))
+      // Keeps the main resume's files, which these entries may share.
+      await deleteUnreferencedFiles(
+        allResumes.flatMap((resume) => [resume.resumePath, resume.imagePath]),
+        allResumes.map((resume) => resume.id)
       )
       setResumes([])
     } finally {
@@ -108,14 +133,14 @@ export default function Home() {
     }
   }
 
-  const averageScore = resumes.length
-    ? Math.round(resumes.reduce((sum, r) => sum + (r.feedback?.overallScore ?? 0), 0) / resumes.length)
+  const averageScore = scoredResumes.length
+    ? Math.round(scoredResumes.reduce((sum, r) => sum + (r.feedback?.overallScore ?? 0), 0) / scoredResumes.length)
     : 0
-  const topScore = resumes.length
-    ? Math.max(...resumes.map((r) => r.feedback?.overallScore ?? 0))
+  const topScore = scoredResumes.length
+    ? Math.max(...scoredResumes.map((r) => r.feedback?.overallScore ?? 0))
     : 0
 
-  const sortedResumes = [...resumes].sort((a, b) => {
+  const sortedResumes = [...allResumes].sort((a, b) => {
     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return sortOrder === 'newest' ? timeB - timeA : timeA - timeB
@@ -126,7 +151,7 @@ export default function Home() {
     <section className="main-section max-w-[1400px] w-full !mx-auto items-stretch px-4 sm:px-6 lg:px-10">
       <div className="flex flex-col gap-3 w-full items-start">
         <h1>Track your applications and resume ratings</h1>
-        {!loading && resumes.length === 0 ? (
+        {!loading && allResumes.length === 0 ? (
           <h2 className="max-w-2xl">No resumes found. Upload your first resume to get feedback.</h2>
         ) : (
           <h2 className="max-w-2xl">Review every submission in one place and see exactly how each tailored resume is scoring, before a recruiter does.</h2>
@@ -139,10 +164,10 @@ export default function Home() {
         </div>
       )}
 
-      {!loading && resumes.length > 0 && (
+      {!loading && allResumes.length > 0 && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border bg-surface border border-border rounded-2xl w-full overflow-hidden">
-            <StatCell label="Applications" value={resumes.length} />
+            <StatCell label="Applications" value={allResumes.length} />
             <StatCell label="Average score" value={averageScore} suffix="/100" />
             <StatCell label="Top score" value={topScore} suffix="/100" />
           </div>
@@ -204,7 +229,7 @@ export default function Home() {
         </>
       )}
 
-      {!loading && resumes.length === 0 && (
+      {!loading && allResumes.length === 0 && (
         <div className="flex flex-col items-center justify-center mt-10 gap-4">
           <UploadButton />
         </div>

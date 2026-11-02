@@ -5,7 +5,8 @@ import Details from '~/components/Details'
 import Summary from '~/components/Summary'
 import Navbar from '~/components/Navbar'
 import { usePuterStore } from '~/lib/puter'
-import { cn } from '~/lib/utils'
+import { useAnalysisQueue } from '~/lib/queue'
+import { cn, getResumeStatus } from '~/lib/utils'
 
 export const meta = () => ([
     { title: 'The Reality Check | Review' },
@@ -33,22 +34,40 @@ const Resume = () => {
     const [resumeUrl, setResumeUrl] = useState('')
     const [feedback, setFeedback] = useState<Feedback | null>(null)
     const [resumeInfo, setResumeInfo] = useState<{ companyName?: string; jobTitle?: string }>({})
+    const [status, setStatus] = useState<ResumeStatus | null>(null)
+    const [error, setError] = useState<string | undefined>()
     const { auth, isLoading, fs, kv } = usePuterStore()
     const { id } = useParams()
+    const job = useAnalysisQueue((state) => (id ? state.jobs[id] : undefined))
+    const liveStatus = job?.resume.status
     const navigate = useNavigate()
 
     useEffect(() => {
-        if (!isLoading && !auth.isAuthenticated) navigate(`/auth?next=/resume${id}`)
+        if (!isLoading && !auth.isAuthenticated) navigate(`/auth?next=/resume/${id}`)
     }, [isLoading])
 
     useEffect(() => {
         const loadResume = async () => {
+            // Still in the queue (possibly not saved yet): show its live state.
+            if (job && liveStatus !== 'done') {
+                setResumeInfo({ companyName: job.resume.companyName, jobTitle: job.resume.jobTitle })
+                setStatus(liveStatus ?? 'processing')
+                setError(job.resume.error)
+                return
+            }
+
             const resume = await kv.get(`resume:${id}`)
 
             if (!resume) return
 
-            const data = JSON.parse(resume)
+            const data = JSON.parse(resume) as Resume
             setResumeInfo({ companyName: data.companyName, jobTitle: data.jobTitle })
+
+            // No live job here, so a saved "processing" entry was interrupted by a reload.
+            const savedStatus = getResumeStatus(data)
+            setStatus(savedStatus === 'processing' ? 'failed' : savedStatus)
+            setError(savedStatus === 'processing' ? 'Analysis was interrupted.' : data.error)
+            if (savedStatus !== 'done') return
 
             const resumeBlob = await fs.read(data.resumePath)
             if (!resumeBlob) return
@@ -61,11 +80,11 @@ const Resume = () => {
             const imageUrl = URL.createObjectURL(imageBlob)
             setImageUrl(imageUrl)
 
-            setFeedback(data.feedback)
+            setFeedback(data.feedback ?? null)
         }
 
         loadResume()
-    }, [id])
+    }, [id, liveStatus])
 
     return (
         <main className="!pt-0 min-h-screen bg-background">
@@ -109,8 +128,21 @@ const Resume = () => {
                             </div>
                         </div>
                     </div>
+                ) : status === 'failed' ? (
+                    <div className="bg-surface border border-border rounded-2xl p-8 flex flex-col items-center gap-3 text-center">
+                        <p className="font-display font-semibold text-lg text-foreground">This analysis didn't finish</p>
+                        <p className="text-sm text-danger">{error || 'Something went wrong.'}</p>
+                        <p className="text-sm text-foreground-secondary">You can retry it from the homepage.</p>
+                    </div>
                 ) : (
-                    <img src="/images/resume-scan-2.gif" className="w-full max-w-md mx-auto" />
+                    <div className="flex flex-col items-center gap-4 text-center">
+                        <img src="/images/resume-scan-2.gif" className="w-full max-w-md mx-auto" />
+                        {status === 'processing' && (
+                            <p className="font-display font-semibold text-lg text-foreground">
+                                {job?.statusText || 'Processing...'}
+                            </p>
+                        )}
+                    </div>
                 )}
             </section>
         </main>
