@@ -26,6 +26,7 @@ const ScoreRing = ({ score }: { score: number }) => {
                 <span className="text-4xl font-display font-bold text-foreground">{score}</span>
                 <span className="text-sm text-foreground-muted">/100</span>
             </div>
+            <p className="absolute -bottom-6 inset-x-0 text-center text-xs font-medium uppercase tracking-wide text-foreground-muted">Overall</p>
         </div>
     )
 }
